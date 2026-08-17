@@ -1,6 +1,13 @@
 export const CURRENCY = "FCFA";
 export const DEFAULT_VAT_RATE = 18; // 18% standard UEMOA / CEMAC
 
+export const DEFAULT_SUPABASE_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://veeempgzrqzshwusdnjp.supabase.co";
+
+export const DEFAULT_SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlZWVtcGd6cnF6c2h3dXNkbmpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTc0OTUsImV4cCI6MjEwMjUzMzQ5NX0.mAGNKZ4mWLmmrTuGB7jw5bFE-5CVaxJRVaBpTaftkQk";
+
 export const INVOICE_STATUS_LABELS = {
   payee: "Payée",
   envoyee: "Envoyée",
