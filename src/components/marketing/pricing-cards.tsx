@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Check, ArrowRight, Loader2, CreditCard, ShieldCheck } from "lucide-react";
 import { formatFCFA } from "@/lib/format";
+import { DEFAULT_SUPABASE_URL } from "@/lib/constants";
 
 export function PricingCards() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -65,28 +66,33 @@ export function PricingCards() {
     setError(null);
 
     try {
-      const res = await fetch("/api/stripe/checkout", {
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://saasjules.vercel.app";
+      const edgeFunctionUrl = `${DEFAULT_SUPABASE_URL}/functions/v1/create-linkedin-checkout`;
+
+      const res = await fetch(edgeFunctionUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planKey }),
+        body: JSON.stringify({
+          planKey,
+          successUrl: `${origin}/dashboard?checkout=success&plan=${planKey}`,
+          cancelUrl: `${origin}/tarifs?checkout=cancelled`,
+        }),
       });
 
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Impossible d'initialiser le paiement.");
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Impossible d'initialiser le paiement Stripe.");
       }
 
-      if (data.url) {
-        window.location.href = data.url;
-      }
+      // Redirection directe et immédiate vers la page officielle Stripe Checkout
+      window.location.href = data.url;
     } catch (err: unknown) {
       setError(
         err instanceof Error
           ? err.message
           : "Erreur lors de la redirection vers le paiement sécurisé."
       );
-    } finally {
       setLoadingPlan(null);
     }
   };
