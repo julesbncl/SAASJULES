@@ -1,69 +1,47 @@
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
-import { stripe, STRIPE_PLANS } from "@/lib/stripe";
+import { DEFAULT_SUPABASE_URL } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
   try {
-    const { planKey } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { planKey = "pro" } = body;
 
-    if (!planKey || !(planKey in STRIPE_PLANS)) {
-      return NextResponse.json(
-        { error: "Plan d'abonnement invalide." },
-        { status: 400 }
-      );
-    }
-
-    const plan = STRIPE_PLANS[planKey as keyof typeof STRIPE_PLANS];
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // Check if Stripe key is configured
-    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.startsWith("sk_test_mock")) {
-      return NextResponse.json(
-        {
-          error:
-            "Veuillez configurer votre clé secrète Stripe (STRIPE_SECRET_KEY) dans vos variables d'environnement.",
-        },
-        { status: 400 }
+    const origin = req.headers.get("origin") || "https://saasjules.vercel.app";
+
+    // Appel direct de l'Edge Function Supabase (qui contient déjà la clé STRIPE_SECRET_KEY)
+    const edgeFunctionUrl = `${DEFAULT_SUPABASE_URL}/functions/v1/create-linkedin-checkout`;
+
+    const edgeRes = await fetch(edgeFunctionUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        planKey: planKey,
+        userId: user?.id || "anonymous",
+        userEmail: user?.email || undefined,
+        successUrl: `${origin}/dashboard?checkout=success&plan=${planKey}`,
+        cancelUrl: `${origin}/tarifs?checkout=cancelled`,
+      }),
+    });
+
+    const data = await edgeRes.json();
+
+    if (!edgeRes.ok || !data.url) {
+      throw new Error(
+        data.error || "Impossible d'initialiser le paiement Stripe."
       );
     }
 
-    const origin = req.headers.get("origin") || "http://localhost:3000";
-
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: plan.currency,
-            product_data: {
-              name: `JulesFactures — Formule ${plan.name}`,
-              description: plan.description,
-            },
-            unit_amount: plan.price, // XOF is a zero-decimal currency in Stripe
-            recurring: {
-              interval: plan.interval as Stripe.Checkout.SessionCreateParams.LineItem.PriceData.Recurring.Interval,
-            },
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "subscription",
-      customer_email: user?.email || undefined,
-      success_url: `${origin}/dashboard?checkout=success&plan=${planKey}`,
-      cancel_url: `${origin}/tarifs?checkout=cancelled`,
-      metadata: {
-        userId: user?.id || "anonymous",
-        planKey: planKey,
-      },
-    });
-
-    return NextResponse.json({ url: session.url });
+    return NextResponse.json({ url: data.url, sessionId: data.sessionId });
   } catch (err: unknown) {
-    console.error("Erreur Stripe Checkout:", err);
+    console.error("Erreur Checkout Route:", err);
     return NextResponse.json(
       {
         error:
